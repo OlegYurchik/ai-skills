@@ -54,3 +54,4 @@ description: Code conventions, typing, testing habits, and engineering principle
 - Do not use `from __future__ import annotations`. Use explicit forward-reference strings (e.g. `"MyClass"`) when necessary.
 - Do not use `if TYPE_CHECKING:` blocks. Import the types you need at the top level. Deferred imports inside `TYPE_CHECKING` hide dependencies and break runtime introspection.
 - Do not abbreviate variable or parameter names. Write them out in full so the intent is obvious without context. Examples of forbidden abbreviations: `idx` (use `index`), `dep` (use `dependency`), `cfg` (use `config` or `configuration`), `msg` (use `message`), `err` (use `error`), `resp` (use `response`). The same rule applies to class attributes, function parameters, and local variables.
+- Exception: when implementing Typer commands, the parameter name `ctx` is allowed for the `typer.Context` object because it is the idiomatic name required by the framework.

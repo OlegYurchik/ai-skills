@@ -83,6 +83,116 @@ class RESTAPIService(facet.AsyncioServiceMixin):
   - `dependencies.py` — FastAPI dependency functions reused across handlers in the package.
   - `exceptions.py` — custom HTTP exceptions for this domain.
 
+### Dependencies
+
+- Declare reusable dependencies in `dependencies.py` inside the handler sub-package. Dependencies are plain functions or async functions that return a value needed by endpoints (database session, current user, settings, etc.).
+- Use `fastapi.Depends` in `router.py` to wire dependencies to routes. Avoid calling dependencies directly in handlers.
+- Keep dependencies stateless; if they need configuration, accept it as an argument and use a closure or a callable class when wiring.
+
+Example `api/rest/users/dependencies.py`:
+```python
+import fastapi
+
+from project.api.rest.exceptions import HTTPUnauthorized
+from project.api.rest.dependencies import database
+
+
+async def current_user(
+    database: DatabaseService = fastapi.Depends(database),
+    token: str = fastapi.Depends(tokens.oauth2_scheme),
+) -> User:
+    db_token = await database.get_token(token)
+    if db_token is None:
+        raise HTTPUnauthorized()
+    return await database.get_user(filter_=UserFilter(id=db_token.user_id))
+```
+
+Example `api/rest/users/schemas.py`:
+```python
+from pydantic import BaseModel
+
+
+class UserResponse(BaseModel):
+    user_id: int
+    requested_by: str
+```
+
+Example `api/rest/users/handlers.py` consuming a dependency:
+```python
+import fastapi
+
+from . import dependencies, schemas
+
+
+async def get_user(
+    id: int,
+    user: User = fastapi.Depends(dependencies.current_user),
+) -> schemas.UserResponse:
+    return schemas.UserResponse(user_id=id, requested_by=user.username)
+```
+
+### List endpoints
+
+- Use a shared `ListResponse` schema for endpoints that return collections. It is defined once in `api/rest/schemas.py` and reused across packages.
+- Extract pagination and search via a reusable `pagination` dependency declared in `api/rest/dependencies.py`.
+
+Example `api/rest/schemas.py`:
+```python
+from typing import Any
+from pydantic import BaseModel
+
+
+class ListResponse(BaseModel):
+    total: int
+    next: str | None
+    previous: str | None
+    data: list[Any]
+
+
+class UserResponse(BaseModel):
+    ...
+
+
+class UsersResponse(ListResponse):
+    data: list[UserResponse]
+```
+
+Example `api/rest/dependencies.py`:
+```python
+import fastapi
+from pydantic import BaseModel
+
+
+class Pagination(BaseModel):
+    cursor: str | None = None
+    limit: int = 20
+    search: str | None = None
+    order_by: str | None = None
+
+
+def pagination(
+        cursor: str | None = fastapi.Query(default=None),
+        limit: int = fastapi.Query(default=20, ge=1),
+        search: str | None = fastapi.Query(default=None),
+        order_by: str | None = fastapi.Query(default=None)
+) -> PaginationParams:
+    return PaginationParams(cursor=cursor, limit=limit, search=search)
+```
+
+Example `api/rest/users/handlers.py` using the list schema and pagination dependency:
+```python
+import fastapi
+
+from api.rest.dependencies import PaginationParams, pagination
+from . import schemas
+
+
+async def get_users(
+    pagination: PaginationParams = fastapi.Depends(pagination),
+) -> schemas.UsersResponse:
+    ...
+```
+
 Example `api/rest/users/router.py`:
 ```python
 import fastapi
